@@ -11,210 +11,338 @@
 #include "PointOfInterrest.h"
 
 std::shared_ptr<PointOfInterrest> PlayerController::FindCheapestVillageUsingDijkstra(
-    std::shared_ptr<Unit> unit, bool allowDiags = false)
+	std::shared_ptr<Unit> unit, bool allowDiags = false)
 {
-    std::shared_ptr<Map> map = game->GetMap();
-    std::shared_ptr<Tile> startTile = map->GetTile(unit->GetPosition().x, unit->GetPosition().y);
-    std::shared_ptr<Tile> currentTile = startTile;
+	std::shared_ptr<Map> map = game->GetMap();
+	std::shared_ptr<Tile> startTile = map->GetTile(unit->GetPosition().x, unit->GetPosition().y);
+	std::shared_ptr<Tile> currentTile = startTile;
 
-    std::list<std::shared_ptr<Tile>> lockedNodes;
-    std::map<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> infoCost;
-    infoCost.emplace(startTile, std::pair<std::shared_ptr<Tile>, int>(startTile, 0));
+	std::list<std::shared_ptr<Tile>> lockedNodes;
+	std::map<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> infoCost;
+	infoCost.emplace(startTile, std::pair<std::shared_ptr<Tile>, int>(startTile, 0));
 
-    std::list<std::pair<CVect, std::shared_ptr<PointOfInterrest>>> villages;
-    for (std::shared_ptr<PointOfInterrest> poi : game->GetPointsOfInterest())
-    {
-        if (poi && poi->GetEntityType() == EntityType::Village)
-            villages.emplace_back(poi->GetPosition(), poi);
-    }
+	std::list<std::pair<CVect, std::shared_ptr<PointOfInterrest>>> villages;
+	for (std::shared_ptr<PointOfInterrest> poi : game->GetPointsOfInterest())
+	{
+		if (poi && poi->GetEntityType() == EntityType::Village)
+			villages.emplace_back(poi->GetPosition(), poi);
+	}
 
-    const int BLOCKING_TILE_COST = 0x7FFFFFFF;
-    
-    while (currentTile != nullptr)
-    {
-        for (std::pair<CVect, std::shared_ptr<PointOfInterrest>> village : villages)
-        {
-            if (currentTile->GetPosition() == village.first)
-                return village.second;
-        }
-        
+	const int BLOCKING_TILE_COST = 0x7FFFFFFF;
+
+	while (currentTile != nullptr)
+	{
+		for (std::pair<CVect, std::shared_ptr<PointOfInterrest>> village : villages)
+		{
+			if (currentTile->GetPosition() == village.first)
+				return village.second;
+		}
+
 #pragma region Direction
-        std::list<std::pair<std::shared_ptr<Tile>, int>> availableTile;
-        std::vector<std::pair<int, int>> directions;
-        directions.emplace_back(1, 0);
-        directions.emplace_back(0, 1);
-        directions.emplace_back(-1, 0);
-        directions.emplace_back(0, -1);
-        if (allowDiags)
-        {
-            directions.emplace_back(1, 1);
-            directions.emplace_back(-1, -1);
-            directions.emplace_back(1, -1);
-            directions.emplace_back(-1, 1);
-        }
+		std::list<std::pair<std::shared_ptr<Tile>, int>> availableTile;
+		std::vector<std::pair<int, int>> directions;
+		directions.emplace_back(1, 0);
+		directions.emplace_back(0, 1);
+		directions.emplace_back(-1, 0);
+		directions.emplace_back(0, -1);
+		if (allowDiags)
+		{
+			directions.emplace_back(1, 1);
+			directions.emplace_back(-1, -1);
+			directions.emplace_back(1, -1);
+			directions.emplace_back(-1, 1);
+		}
 #pragma endregion
-        
-        for (std::pair<int, int> dir : directions)
-        {
-            int x = currentTile->GetPosition().x + dir.first;
-            int y = currentTile->GetPosition().y + dir.second;
-            if (x < 0 || y < 0 || x >= map->GetWidth() || y >= map->GetHeight())
-                continue;
 
-            std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
-            if (neighbour == nullptr)
-                continue;
-            if (neighbour->GetCost() == BLOCKING_TILE_COST)
-            {
-                std::cout << neighbour->GetCost() << std::endl;   
-                continue;
-            }
+		for (std::pair<int, int> dir : directions)
+		{
+			int x = currentTile->GetPosition().x + dir.first;
+			int y = currentTile->GetPosition().y + dir.second;
+			if (x < 0 || y < 0 || x >= map->GetWidth() || y >= map->GetHeight())
+				continue;
 
-            availableTile.emplace_back(neighbour, neighbour->GetCost());
-        }
+			std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
+			if (neighbour == nullptr || neighbour->GetCost() < 0)
+				continue;
+			if (neighbour->GetCost() == BLOCKING_TILE_COST)
+			{
+				std::cout << neighbour->GetCost() << std::endl;
+				continue;
+			}
 
-        for (std::pair<std::shared_ptr<Tile>, int> node : availableTile)
-        {
-            if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
-                continue;
+			availableTile.emplace_back(neighbour, neighbour->GetCost());
+		}
 
-            int myCost = node.second + infoCost[currentTile].second;
-            if (infoCost.count(node.first) == 0 || myCost < infoCost[node.first].second)
-            {
-                infoCost[node.first] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
-            }
-        }
-        lockedNodes.emplace_back(currentTile);
+		for (std::pair<std::shared_ptr<Tile>, int> node : availableTile)
+		{
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
+				continue;
 
-        // next tile
-        int minCost = BLOCKING_TILE_COST;
-        currentTile = nullptr;
-        for (std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> node : infoCost)
-        {
-            if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
-                continue;
+			int myCost = node.second + infoCost[currentTile].second;
+			if (infoCost.count(node.first) == 0 || myCost < infoCost[node.first].second)
+			{
+				infoCost[node.first] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
+			}
+		}
+		lockedNodes.emplace_back(currentTile);
 
-            if (node.second.second < minCost)
-            {
-                currentTile = node.first;
-                minCost = node.second.second;
-            }
-        }
-    }
+		// next tile
+		int minCost = BLOCKING_TILE_COST;
+		currentTile = nullptr;
+		for (std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> node : infoCost)
+		{
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
+				continue;
 
-    return nullptr;
+			if (node.second.second < minCost)
+			{
+				currentTile = node.first;
+				minCost = node.second.second;
+			}
+		}
+	}
+
+	return nullptr;
 }
 
 // Added By Myself
-int heuristique(const std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>>::first_type& tile, const CVect& to){return 0;};
 
 void PlayerController::ComputePathUsingAStar(std::shared_ptr<Unit> unit, CVect to, bool allowDiags = false)
 {
-    //This function computes the path from a unit to a destination using A*
+	//This function computes the path from a unit to a destination using A*
 
-    //Temp code, to be replaced by your own code
+	//Temp code, to be replaced by your own code
 
-    std::shared_ptr<Map> map = game->GetMap();
-    std::shared_ptr<Tile> startTile = map->GetTile(unit->GetPosition().x, unit->GetPosition().y);
-    std::shared_ptr<Tile> currentTile = startTile;
+	std::shared_ptr<Map> map = game->GetMap();
+	std::shared_ptr<Tile> startTile = map->GetTile(unit->GetPosition().x, unit->GetPosition().y);
+	std::shared_ptr<Tile> currentTile = startTile;
 
-    std::list<std::shared_ptr<Tile>> lockedNodes;
-    std::map<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> infoCost;
-    infoCost.emplace(startTile, std::pair<std::shared_ptr<Tile>, int>(startTile, 0));
+	std::list<std::shared_ptr<Tile>> lockedNodes;
+	std::map<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> infoCost;
+	infoCost.emplace(startTile, std::pair<std::shared_ptr<Tile>, int>(nullptr, 0));
 
-    std::vector<CVect> path;
+	std::vector<CVect> path;
 
-    const int BLOCKING_TILE_COST = 0x7FFFFFFF;
-    
-    while (currentTile != nullptr && currentTile->GetPosition() != to)
-    {
-       
+	const int BLOCKING_TILE_COST = 0x7FFFFFFF;
+
+	while (currentTile != nullptr && currentTile->GetPosition() != to)
+	{
 #pragma region Direction
-        std::list<std::pair<std::shared_ptr<Tile>, int>> availableTile;
-        std::vector<std::pair<int, int>> directions;
-        directions.emplace_back(1, 0);
-        directions.emplace_back(0, 1);
-        directions.emplace_back(-1, 0);
-        directions.emplace_back(0, -1);
-        if (allowDiags)
-        {
-            directions.emplace_back(1, 1);
-            directions.emplace_back(-1, -1);
-            directions.emplace_back(1, -1);
-            directions.emplace_back(-1, 1);
-        }
+		std::list<std::pair<std::shared_ptr<Tile>, int>> availableTile;
+		std::vector<CVect> directions;
+		directions.emplace_back(1, 0);
+		directions.emplace_back(0, 1);
+		directions.emplace_back(-1, 0);
+		directions.emplace_back(0, -1);
+		if (allowDiags)
+		{
+			directions.emplace_back(1, 1);
+			directions.emplace_back(-1, -1);
+			directions.emplace_back(1, -1);
+			directions.emplace_back(-1, 1);
+		}
 #pragma endregion
-        
-        for (std::pair<int, int> dir : directions)
-        {
-            int x = currentTile->GetPosition().x + dir.first;
-            int y = currentTile->GetPosition().y + dir.second;
-            if (x < 0 || y < 0 || x >= map->GetWidth() || y >= map->GetHeight())
-                continue;
 
-            std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
-            if (neighbour == nullptr)
-                continue;
-            if (neighbour->GetCost() == BLOCKING_TILE_COST)
-            {
-                std::cout << neighbour->GetCost() << std::endl;   
-                continue;
-            }
+		for (CVect dir : directions)
+		{
+			int x = currentTile->GetPosition().x + dir.x;
+			int y = currentTile->GetPosition().y + dir.y;
 
-            availableTile.emplace_back(neighbour, neighbour->GetCost());
-        }
+			std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
+			if (neighbour == nullptr || neighbour->GetCost() < 0)
+				continue;
 
-        for (std::pair<std::shared_ptr<Tile>, int> node : availableTile)
-        {
-            if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
-                continue;
+			availableTile.emplace_back(neighbour, neighbour->GetCost());
+		}
 
-            int myCost = node.second + infoCost[currentTile].second;
-            if (infoCost.count(node.first) == 0 || myCost < infoCost[node.first].second)
-            {
-                infoCost[node.first] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
-            }
-        }
-        lockedNodes.emplace_back(currentTile);
+		for (std::pair<std::shared_ptr<Tile>, int> node : availableTile)
+		{
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
+				continue;
 
-        // next tile
-        int minCost = BLOCKING_TILE_COST;
-        currentTile = nullptr;
-        for (std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> node : infoCost)
-        {
-            if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
-                continue;
+			int myCost = node.second + infoCost[currentTile].second + (to - node.first->GetPosition()).getLength();
+			if (infoCost.find(node.first) != infoCost.end())
+			{
+				if (myCost < infoCost[node.first].second)
+					infoCost[node.first] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
+			}
+			else
+			{
+				infoCost[node.first] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
+			}
+		}
+		lockedNodes.emplace_back(currentTile);
 
-            int valHeuristique = heuristique(node.first, to);
-            if (node.second.second + valHeuristique < minCost)
-            {
-                currentTile = node.first;
-                minCost = node.second.second + valHeuristique;
-            }
-        }
-    }
-    
-    if (currentTile != nullptr)
-    {
-        std::shared_ptr<Tile> step = currentTile;
-        while (step != startTile)
-        {
-            path.emplace_back(step->GetPosition());
-            step = infoCost[step].first;
-        }
-        std::reverse(path.begin(), path.end());
-    }
-    if (!path.empty())
-        unit->SetPath(path);
+		// next tile
+		unsigned int minCost = BLOCKING_TILE_COST;
+		currentTile = nullptr;
+		for (std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> node : infoCost)
+		{
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
+				continue;
+
+			if (node.second.second < minCost)
+			{
+				currentTile = node.first;
+				minCost = node.second.second;
+			}
+		}
+	}
+
+	if (currentTile != nullptr)
+	{
+		std::shared_ptr<Tile> step = currentTile;
+		while (step != startTile)
+		{
+			path.emplace_back(step->GetPosition());
+			step = infoCost[step].first;
+		}
+		std::reverse(path.begin(), path.end());
+	}
+	if (!path.empty())
+		unit->SetPath(path);
 }
 
 
 void FlowFieldMap::GenerateFlowField(std::shared_ptr<Game> game, CVect cvect, bool useCamps = false,
-                                     bool allowDiags = false)
+	bool allowDiags = false)
 {
-    //This function generates the flow field to get to the right destination:
-    //if useCamps = false => use cvect
-    //if useCamps = true => use game to get the proper camp
-    auto map = game->GetMap();
-    ResetMap(map->GetWidth(), map->GetHeight());
+	//This function generates the flow field to get to the right destination:
+	//if useCamps = false => use cvect
+	//if useCamps = true => use game to get the proper camp
+
+	auto map = game->GetMap();
+	ResetMap(map->GetWidth(), map->GetHeight());
+
+#pragma region Direction
+	std::list<std::pair<std::shared_ptr<Tile>, int>> availableTile;
+	std::vector<std::pair<int, int>> directions;
+	directions.emplace_back(1, 0);
+	directions.emplace_back(0, 1);
+	directions.emplace_back(-1, 0);
+	directions.emplace_back(0, -1);
+	if (allowDiags)
+	{
+		directions.emplace_back(1, 1);
+		directions.emplace_back(-1, -1);
+		directions.emplace_back(1, -1);
+		directions.emplace_back(-1, 1);
+	}
+#pragma endregion
+
+
+	const int BLOCKING_TILE_COST = 0x7FFFFFFF;
+	const int width = map->GetWidth();
+	const int height = map->GetHeight();
+
+
+
+	std::list<std::shared_ptr<Tile>> lockedNodes;
+	std::map<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> infoCost;
+
+	CVect goal;
+	if (useCamps)
+	{
+		for (std::shared_ptr<PointOfInterrest> poi : game->GetPointsOfInterest())
+		{
+			if (poi->GetEntityType() == EntityType::GoblinCamp)
+			{
+				goal = poi->GetPosition();
+				infoCost[map->GetTile(goal.x, goal.y)] = std::pair<std::shared_ptr<Tile>, int>(nullptr, 0);
+			}
+		}
+	}
+	else
+	{
+		goal = cvect;
+	}
+
+	std::shared_ptr<Tile> goalTile = map->GetTile(goal.x, goal.y);
+	if (goalTile == nullptr)
+		return;
+	std::shared_ptr<Tile> currentTile = goalTile;
+	infoCost.emplace(goalTile, std::pair<std::shared_ptr<Tile>, int>(nullptr, 0));
+
+	while (currentTile != nullptr)
+	{
+		for (std::pair<int, int> dir : directions)
+		{
+			int x = currentTile->GetPosition().x + dir.first;
+			int y = currentTile->GetPosition().y + dir.second;
+			if (x < 0 || y < 0 || x >= width || y >= height)
+				continue;
+
+			std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
+			if (neighbour == nullptr || neighbour->GetCost() < 0)
+				continue;
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), neighbour) != lockedNodes.end())
+				continue;
+
+			int myCost = neighbour->GetCost() + infoCost[currentTile].second;
+			if (infoCost.find(neighbour) != infoCost.end())
+			{
+				if (myCost < infoCost[neighbour].second)
+					infoCost[neighbour] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
+			}
+			else
+			{
+				infoCost[neighbour] = std::pair<std::shared_ptr<Tile>, int>(currentTile, myCost);
+			}
+		}
+		lockedNodes.emplace_back(currentTile);
+
+		// next tile
+		unsigned int minCost = BLOCKING_TILE_COST;
+		currentTile = nullptr;
+		for (std::pair<std::shared_ptr<Tile>, std::pair<std::shared_ptr<Tile>, int>> node : infoCost)
+		{
+			if (std::find(lockedNodes.begin(), lockedNodes.end(), node.first) != lockedNodes.end())
+				continue;
+
+			if (node.second.second < minCost)
+			{
+				currentTile = node.first;
+				minCost = node.second.second;
+			}
+		}
+	}
+
+#pragma region Fill flow field
+	for (std::shared_ptr<Tile> tile : lockedNodes)
+	{
+		if (infoCost.find(tile) != infoCost.end())
+			distanceMap[tile->GetPosition().y][tile->GetPosition().x] = infoCost[tile].second;
+		else
+			distanceMap[tile->GetPosition().y][tile->GetPosition().x] = BLOCKING_TILE_COST;
+	}
+
+	for (std::shared_ptr<Tile> tile : lockedNodes)
+	{
+		if (infoCost[tile].second == 0)
+			continue;
+
+		unsigned int cost = BLOCKING_TILE_COST;
+
+		for (std::pair<int, int> dir : directions)
+		{
+			int x = tile->GetPosition().x + dir.first;
+			int y = tile->GetPosition().y + dir.second;
+
+			std::shared_ptr<Tile> neighbour = map->GetTile(x, y);
+			if (neighbour == nullptr || neighbour->GetCost() < 0)
+				continue;
+
+			if (infoCost.find(neighbour) != infoCost.end())
+			{
+				if (cost > infoCost[neighbour].second)
+				{
+					cost = infoCost[neighbour].second;
+					flowField[tile->GetPosition().y][tile->GetPosition().x] = CVect(
+						neighbour->GetPosition().x - tile->GetPosition().x,
+						neighbour->GetPosition().y - tile->GetPosition().y);
+				}
+			}
+		}
+	}
+#pragma endregion
 }
